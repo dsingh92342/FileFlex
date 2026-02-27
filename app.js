@@ -1,4 +1,7 @@
 document.addEventListener("DOMContentLoaded", () => {
+    // Initialize Lucide Icons
+    lucide.createIcons();
+
     const dropZone = document.getElementById("drop-zone");
     const fileInput = document.getElementById("file-input");
     const fileListContainer = document.getElementById("file-list");
@@ -87,6 +90,21 @@ document.addEventListener("DOMContentLoaded", () => {
         const clone = fileTemplate.content.cloneNode(true);
         const fileItem = clone.querySelector('.file-item');
 
+        // Update file icon based on category
+        const iconElement = clone.querySelector('.file-type-icon');
+        if (category === 'image' || category === 'svg') {
+            iconElement.setAttribute('data-lucide', 'image');
+        } else if (category === 'json' || category === 'csv') {
+            iconElement.setAttribute('data-lucide', 'file-text');
+        }
+
+        // Re-initialize icon for the cloned template
+        lucide.createIcons({
+            attrs: {
+                class: 'file-type-icon'
+            }
+        });
+
         // Populate info
         clone.querySelector('.file-name').textContent = file.name;
         clone.querySelector('.file-size').textContent = formatBytes(file.size);
@@ -113,6 +131,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
             const targetFormat = JSON.parse(selectedFormatVal);
             convertBtn.disabled = true;
+            const btnOriginalContent = convertBtn.innerHTML;
+            convertBtn.innerHTML = `<span>Processing...</span>`;
             statusSpan.textContent = "Processing...";
             statusSpan.className = "file-status";
 
@@ -144,6 +164,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 statusSpan.classList.add("status-error");
             } finally {
                 convertBtn.disabled = false;
+                convertBtn.innerHTML = btnOriginalContent;
+                lucide.createIcons();
             }
         });
 
