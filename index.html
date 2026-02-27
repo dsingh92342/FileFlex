@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Universal Local File Converter</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <!-- For Markdown Conversion -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- For PDF Conversion -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+
+<body>
+    <div class="background-blobs">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+    </div>
+
+    <div class="container">
+        <header>
+            <h1>FileFlex</h1>
+            <p>Premium local file transformer. Secure, fast, and entirely in your browser.</p>
+        </header>
+
+        <main>
+            <div id="drop-zone" class="drop-zone">
+                <div class="drop-zone__prompt">
+                    <span>Drag & Drop files here</span>
+                    <small>or click to browse</small>
+                </div>
+                <input type="file" id="file-input" class="drop-zone__input" multiple>
+            </div>
+
+            <div id="file-list" class="file-list">
+                <!-- File items will be injected here -->
+            </div>
+        </main>
+
+        <footer>
+            <p>Made for the local web.</p>
+        </footer>
+    </div>
+
+    <!-- Template for a file item -->
+    <template id="file-item-template">
+        <div class="file-item">
+            <div class="file-info">
+                <span class="file-name">filename.ext</span>
+                <span class="file-size">(size)</span>
+            </div>
+            <div class="conversion-controls">
+                <span>to</span>
+                <select class="format-select">
+                    <option value="" disabled selected>Select format</option>
+                    <!-- Options injected dynamically based on source type -->
+                </select>
+                <button class="convert-btn">Convert</button>
+            </div>
+            <div class="file-status">Ready</div>
+        </div>
+    </template>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
