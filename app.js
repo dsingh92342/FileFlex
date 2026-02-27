@@ -19,6 +19,16 @@ document.addEventListener("DOMContentLoaded", () => {
     const clearAllBtn = document.getElementById("clear-all-btn");
     const batchZipBtn = document.getElementById("batch-zip-btn");
 
+    // FFmpeg.wasm Loading (Lazy-load on first use)
+    let ffmpeg = null;
+    const loadFFmpeg = async () => {
+        if (ffmpeg) return ffmpeg;
+        const { createFFmpeg } = FFmpeg;
+        ffmpeg = createFFmpeg({ log: true });
+        await ffmpeg.load();
+        return ffmpeg;
+    };
+
     clearAllBtn.addEventListener("click", () => {
         const items = Array.from(fileList.children);
         items.forEach((item, index) => {
@@ -85,6 +95,12 @@ document.addEventListener("DOMContentLoaded", () => {
             { label: 'PNG', mime: 'image/png', ext: '.png' },
             { label: 'JPEG', mime: 'image/jpeg', ext: '.jpg' },
             { label: 'WEBP', mime: 'image/webp', ext: '.webp' }
+        ],
+        'video': [
+            { label: 'Extract Audio (MP3)', mime: 'audio/mpeg', ext: '.mp3' },
+            { label: 'Extract Audio (WAV)', mime: 'audio/wav', ext: '.wav' },
+            { label: 'Convert to GIF', mime: 'image/gif', ext: '.gif' },
+            { label: 'Security (SHA-256)', mime: 'text/plain', ext: '.sha256.txt' }
         ],
         'excel': [
             { label: 'JSON', mime: 'application/json', ext: '.json' },
@@ -160,6 +176,7 @@ document.addEventListener("DOMContentLoaded", () => {
             if (file.type === 'image/svg+xml' || ext === '.svg') return 'svg';
             return 'image';
         }
+        if (file.type.startsWith('video/')) return 'video';
         if (ext === '.md' || ext === '.markdown') return 'markdown';
         if (file.type === 'application/json' || ext === '.json') return 'json';
         if (file.type === 'text/csv' || ext === '.csv') return 'csv';
@@ -179,6 +196,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const iconElement = clone.querySelector('.file-type-icon');
         if (category === 'image' || category === 'svg') iconElement.setAttribute('data-lucide', 'image');
+        else if (category === 'video') iconElement.setAttribute('data-lucide', 'clapperboard');
         else if (category === 'excel' || category === 'csv') iconElement.setAttribute('data-lucide', 'file-spreadsheet');
         else if (category === 'json') iconElement.setAttribute('data-lucide', 'braces');
         else if (category === 'markdown') iconElement.setAttribute('data-lucide', 'file-code-2');
@@ -212,7 +230,6 @@ document.addEventListener("DOMContentLoaded", () => {
             });
         }
 
-        // Auto-detect dimensions for image resize
         if (category === 'image') {
             const img = new Image();
             img.onload = () => {
@@ -229,11 +246,9 @@ document.addEventListener("DOMContentLoaded", () => {
             if (!selectedFormatVal) return;
             const targetFormat = JSON.parse(selectedFormatVal);
             
-            // Show/Hide Quality
             if (targetFormat.mime === 'image/jpeg' || targetFormat.mime === 'image/webp') qualityControl.classList.remove('hidden');
             else qualityControl.classList.add('hidden');
 
-            // Show/Hide Resize
             if (targetFormat.label === 'Resize & Scale') resizeControls.classList.remove('hidden');
             else resizeControls.classList.add('hidden');
         });
@@ -254,7 +269,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
             try {
                 let convertedBlob;
-                if (targetFormat.label === 'Generate QR Code') {
+                if (category === 'video') {
+                    convertedBlob = await convertVideo(file, targetFormat.label, targetFormat.ext);
+                } else if (targetFormat.label === 'Generate QR Code') {
                     convertedBlob = await generateQRCode(file);
                 } else if (targetFormat.label.startsWith('Security')) {
                     convertedBlob = await generateFileHash(file);
@@ -341,21 +358,33 @@ document.addEventListener("DOMContentLoaded", () => {
         const text = await file.text();
         return new Promise((resolve) => {
             const container = document.createElement('div');
-            new QRCode(container, {
-                text: text,
-                width: 512,
-                height: 512,
-                colorDark: "#000000",
-                colorLight: "#ffffff",
-                correctLevel: QRCode.CorrectLevel.H
-            });
+            new QRCode(container, { text: text, width: 512, height: 512, colorDark: "#000000", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.H });
             setTimeout(() => {
                 const img = container.querySelector('img');
-                if (img) {
-                    fetch(img.src).then(res => res.blob()).then(resolve);
-                }
+                if (img) fetch(img.src).then(res => res.blob()).then(resolve);
             }, 100);
         });
+    }
+
+    async function convertVideo(file, label, ext) {
+        const ffmpeg = await loadFFmpeg();
+        const { fetchFile } = FFmpeg;
+        ffmpeg.FS('writeFile', 'input', await fetchFile(file));
+
+        if (label === 'Convert to GIF') {
+            await ffmpeg.run('-i', 'input', '-vf', 'fps=10,scale=320:-1:flags=lanczos', '-t', '5', 'output.gif');
+            const data = ffmpeg.FS('readFile', 'output.gif');
+            return new Blob([data.buffer], { type: 'image/gif' });
+        } else if (label.includes('MP3')) {
+            await ffmpeg.run('-i', 'input', '-q:a', '0', '-map', 'a', 'output.mp3');
+            const data = ffmpeg.FS('readFile', 'output.mp3');
+            return new Blob([data.buffer], { type: 'audio/mpeg' });
+        } else if (label.includes('WAV')) {
+            await ffmpeg.run('-i', 'input', 'output.wav');
+            const data = ffmpeg.FS('readFile', 'output.wav');
+            return new Blob([data.buffer], { type: 'audio/wav' });
+        }
+        return null;
     }
 
     function convertImage(file, targetMimeType, quality = 0.9, width, height) {
@@ -384,35 +413,25 @@ document.addEventListener("DOMContentLoaded", () => {
     async function convertExcel(file, targetExt) {
         const data = await file.arrayBuffer();
         const workbook = XLSX.read(data);
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        if (targetExt === '.json') {
-            const json = XLSX.utils.sheet_to_json(worksheet);
-            return new Blob([JSON.stringify(json, null, 2)], { type: 'application/json' });
-        } else {
-            const csv = XLSX.utils.sheet_to_csv(worksheet);
-            return new Blob([csv], { type: 'text/csv' });
-        }
+        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+        if (targetExt === '.json') return new Blob([JSON.stringify(XLSX.utils.sheet_to_json(worksheet), null, 2)], { type: 'application/json' });
+        return new Blob([XLSX.utils.sheet_to_csv(worksheet)], { type: 'text/csv' });
     }
 
     async function convertJsonToExcel(file) {
-        const json = JSON.parse(await file.text());
-        const ws = XLSX.utils.json_to_sheet(Array.isArray(json) ? json : [json]);
+        const ws = XLSX.utils.json_to_sheet(JSON.parse(await file.text()));
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "Data");
-        const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
-        return new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        return new Blob([XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     }
 
     async function convertCsvToExcel(file) {
-        const csv = await file.text();
-        const workbook = XLSX.read(csv, { type: 'string' });
-        const buf = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
-        return new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const workbook = XLSX.read(await file.text(), { type: 'string' });
+        return new Blob([XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     }
 
     async function convertImageToPdf(file) {
-        return new Promise((resolve, reject) => {
+        return new Promise((resolve) => {
             const reader = new FileReader();
             reader.onload = (e) => {
                 const img = new Image();
@@ -429,27 +448,21 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     async function convertJsonToCsv(file) {
-        const json = JSON.parse(await file.text());
-        const ws = XLSX.utils.json_to_sheet(Array.isArray(json) ? json : [json]);
+        const ws = XLSX.utils.json_to_sheet(JSON.parse(await file.text()));
         return new Blob([XLSX.utils.sheet_to_csv(ws)], { type: 'text/csv' });
     }
     
     async function convertJsonFormat(file, beautify) {
-        const json = JSON.parse(await file.text());
-        return new Blob([JSON.stringify(json, null, beautify ? 2 : 0)], { type: 'application/json' });
+        return new Blob([JSON.stringify(JSON.parse(await file.text()), null, beautify ? 2 : 0)], { type: 'application/json' });
     }
 
     async function convertCsvToJson(file) {
-        const csv = await file.text();
-        const workbook = XLSX.read(csv, { type: 'string' });
-        const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
-        return new Blob([JSON.stringify(json, null, 2)], { type: 'application/json' });
+        const workbook = XLSX.read(await file.text(), { type: 'string' });
+        return new Blob([JSON.stringify(XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]), null, 2)], { type: 'application/json' });
     }
 
     async function convertCsvToMarkdown(file) {
-        const csv = await file.text();
-        const workbook = XLSX.read(csv, { type: 'string' });
-        const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+        const json = XLSX.utils.sheet_to_json(XLSX.read(await file.text(), { type: 'string' }).Sheets[XLSX.read(await file.text(), { type: 'string' }).SheetNames[0]]);
         if (json.length === 0) return new Blob([""], { type: 'text/markdown' });
         const headers = Object.keys(json[0]);
         let md = '| ' + headers.join(' | ') + ' |\n|' + headers.map(() => '---').join('|') + '|\n';
@@ -459,8 +472,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     async function convertMarkdownToHtml(file) {
         const html = marked.parse(await file.text());
-        const fullHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{font-family:system-ui,sans-serif;line-height:1.6;max-width:800px;margin:0 auto;padding:2rem;}pre{background:#f4f4f4;padding:1rem;border-radius:8px;}code{font-family:monospace;background:#f4f4f4;padding:0.2rem 0.4rem;}</style></head><body>${html}</body></html>`;
-        return new Blob([fullHtml], { type: 'text/html' });
+        return new Blob([`<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{font-family:system-ui,sans-serif;line-height:1.6;max-width:800px;margin:0 auto;padding:2rem;}pre{background:#f4f4f4;padding:1rem;border-radius:8px;}code{font-family:monospace;background:#f4f4f4;padding:0.2rem 0.4rem;}</style></head><body>${html}</body></html>`], { type: 'text/html' });
     }
 
     async function convertTextToBase64(file) {
@@ -476,7 +488,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     async function convertHtmlToText(file) {
-        const doc = new DOMParser().parseFromString(await file.text(), 'text/html');
-        return new Blob([doc.body.textContent || ""], { type: 'text/plain' });
+        return new Blob([new DOMParser().parseFromString(await file.text(), 'text/html').body.textContent || ""], { type: 'text/plain' });
     }
 });
