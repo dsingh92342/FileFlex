@@ -47,6 +47,9 @@
     }
     </script>
 
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icon.svg">
+
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <!-- Lucide Icons -->
@@ -55,6 +58,8 @@
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js" defer></script>
     <!-- For PDF Conversion -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
+    <!-- For Batch ZIP Conversion -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" defer></script>
 </head>
 
 <body>
@@ -88,9 +93,15 @@
             <div id="file-list-container" class="file-list-container hidden">
                 <div class="list-header">
                     <h3><i data-lucide="layers"></i> Your Files</h3>
-                    <button id="clear-all-btn" class="icon-btn tooltip" aria-label="Clear all files" data-tooltip="Clear All">
-                        <i data-lucide="trash-2"></i>
-                    </button>
+                    <div class="list-actions">
+                        <button id="batch-zip-btn" class="action-btn" aria-label="Download All as ZIP">
+                            <i data-lucide="archive"></i>
+                            <span>ZIP All</span>
+                        </button>
+                        <button id="clear-all-btn" class="icon-btn tooltip" aria-label="Clear all files" data-tooltip="Clear All">
+                            <i data-lucide="trash-2"></i>
+                        </button>
+                    </div>
                 </div>
                 <div id="file-list" class="file-list" aria-live="polite">
                     <!-- File items will be injected here -->

@@ -1,0 +1,17 @@
+{
+  "name": "FileFlex",
+  "short_name": "FileFlex",
+  "description": "Premium local file transformer. Secure, fast, and entirely in your browser.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0a0c10",
+  "theme_color": "#6366f1",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

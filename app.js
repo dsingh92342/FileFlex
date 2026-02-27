@@ -2,17 +2,26 @@ document.addEventListener("DOMContentLoaded", () => {
     // Initialize Lucide Icons
     lucide.createIcons();
 
+    // Register Service Worker for PWA (Offline Support)
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('./sw.js').then(reg => {
+                console.log('ServiceWorker registered:', reg.scope);
+            }).catch(err => console.log('ServiceWorker registration failed:', err));
+        });
+    }
+
     const dropZone = document.getElementById("drop-zone");
     const fileInput = document.getElementById("file-input");
     const fileListContainer = document.getElementById("file-list-container");
     const fileList = document.getElementById("file-list");
     const fileTemplate = document.getElementById("file-item-template");
     const clearAllBtn = document.getElementById("clear-all-btn");
+    const batchZipBtn = document.getElementById("batch-zip-btn");
 
     clearAllBtn.addEventListener("click", () => {
         const items = Array.from(fileList.children);
         items.forEach((item, index) => {
-            // Smooth exit animation
             item.style.transition = 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
             item.style.opacity = '0';
             item.style.transform = 'translateX(30px)';
@@ -21,7 +30,47 @@ document.addEventListener("DOMContentLoaded", () => {
         setTimeout(() => {
             fileList.innerHTML = "";
             fileListContainer.classList.add("hidden");
-        }, 300); // Wait for animation to finish
+        }, 300);
+    });
+
+    batchZipBtn.addEventListener("click", async () => {
+        const items = Array.from(fileList.children);
+        if (items.length === 0) return;
+
+        // Start Zip processing
+        const zip = new JSZip();
+        batchZipBtn.disabled = true;
+        const originalBtnContent = batchZipBtn.innerHTML;
+        batchZipBtn.innerHTML = `<i data-lucide="loader-2" class="spin"></i> <span>Zipping...</span>`;
+        lucide.createIcons();
+
+        let hasFilesToZip = false;
+
+        for (let item of items) {
+            if (item._doConvert) {
+                const result = await item._doConvert();
+                if (result && result.blob) {
+                    zip.file(result.name, result.blob);
+                    hasFilesToZip = true;
+                }
+            }
+        }
+
+        if (hasFilesToZip) {
+            try {
+                const zipContent = await zip.generateAsync({ type: "blob" });
+                triggerDownload(zipContent, "FileFlex_Batch.zip");
+            } catch (err) {
+                console.error("ZIP Generation Failed", err);
+                alert("Failed to generate ZIP file.");
+            }
+        } else {
+            alert("No files were ready or selected for conversion.");
+        }
+
+        batchZipBtn.disabled = false;
+        batchZipBtn.innerHTML = originalBtnContent;
+        lucide.createIcons();
     });
 
     // Formats mapping: source -> available targets
@@ -79,7 +128,6 @@ document.addEventListener("DOMContentLoaded", () => {
         dropZone.addEventListener(eventName, () => dropZone.classList.remove("drop-zone--over"), false);
     });
 
-    // Handle dropped or selected files
     dropZone.addEventListener('drop', (e) => handleFiles(e.dataTransfer.files), false);
     fileInput.addEventListener('change', (e) => handleFiles(e.target.files), false);
 
@@ -122,39 +170,23 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const availableFormats = CONVERSION_MAP[category];
 
-        // Clone template
         const clone = fileTemplate.content.cloneNode(true);
         const fileItem = clone.querySelector('.file-item');
 
-        // Staggered entry animation based on index
         fileItem.style.animationDelay = `${index * 0.1}s`;
 
-        // Update file icon based on category
         const iconElement = clone.querySelector('.file-type-icon');
-        if (category === 'image' || category === 'svg') {
-            iconElement.setAttribute('data-lucide', 'image');
-        } else if (category === 'json' || category === 'csv') {
-            iconElement.setAttribute('data-lucide', 'file-spreadsheet');
-        } else if (category === 'markdown') {
-            iconElement.setAttribute('data-lucide', 'file-code-2');
-        } else if (category === 'text') {
-            iconElement.setAttribute('data-lucide', 'file-text');
-        } else if (category === 'html') {
-            iconElement.setAttribute('data-lucide', 'globe');
-        }
+        if (category === 'image' || category === 'svg') iconElement.setAttribute('data-lucide', 'image');
+        else if (category === 'json' || category === 'csv') iconElement.setAttribute('data-lucide', 'file-spreadsheet');
+        else if (category === 'markdown') iconElement.setAttribute('data-lucide', 'file-code-2');
+        else if (category === 'text') iconElement.setAttribute('data-lucide', 'file-text');
+        else if (category === 'html') iconElement.setAttribute('data-lucide', 'globe');
 
-        // Re-initialize icon for the cloned template
-        lucide.createIcons({
-            attrs: {
-                class: 'file-type-icon'
-            }
-        });
+        lucide.createIcons({ attrs: { class: 'file-type-icon' } });
 
-        // Populate info
         clone.querySelector('.file-name').textContent = file.name;
         clone.querySelector('.file-size').textContent = formatBytes(file.size);
 
-        // Populate select
         const select = clone.querySelector('.format-select');
         availableFormats.forEach(format => {
             if (file.type === format.mime && format.label !== 'Minify' && format.label !== 'Beautify') return;
@@ -164,7 +196,6 @@ document.addEventListener("DOMContentLoaded", () => {
             select.appendChild(option);
         });
 
-        // Setup Quality Control
         const qualityControl = clone.querySelector('.quality-control');
         const qualitySlider = clone.querySelector('.quality-slider');
         const qualityValue = clone.querySelector('.quality-value');
@@ -187,31 +218,26 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         });
 
-        // Setup Convert Button
         const convertBtn = clone.querySelector('.convert-btn');
         const statusSpan = clone.querySelector('.file-status');
 
-        convertBtn.addEventListener('click', async () => {
+        // Abstracted Conversion Logic so it can be called by Batch ZIP
+        fileItem._doConvert = async () => {
             const selectedFormatVal = select.value;
-            if (!selectedFormatVal) return;
+            if (!selectedFormatVal) return null;
 
             const targetFormat = JSON.parse(selectedFormatVal);
             const quality = qualitySlider ? parseFloat(qualitySlider.value) : 0.9;
             
             convertBtn.disabled = true;
-            const btnOriginalContent = convertBtn.innerHTML;
-            convertBtn.innerHTML = `<span>Processing...</span>`;
             statusSpan.textContent = "Processing...";
             statusSpan.className = "file-status";
 
             try {
                 let convertedBlob;
                 if (category === 'image' || category === 'svg') {
-                    if (targetFormat.ext === '.pdf') {
-                        convertedBlob = await convertImageToPdf(file);
-                    } else {
-                        convertedBlob = await convertImage(file, targetFormat.mime, quality);
-                    }
+                    if (targetFormat.ext === '.pdf') convertedBlob = await convertImageToPdf(file);
+                    else convertedBlob = await convertImage(file, targetFormat.mime, quality);
                 } else if (category === 'json') {
                     if (targetFormat.ext === '.csv') convertedBlob = await convertJsonToCsv(file);
                     else if (targetFormat.label === 'Minify') convertedBlob = await convertJsonFormat(file, false);
@@ -231,26 +257,40 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (convertedBlob) {
                     const originalNameNoExt = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
                     const newFileName = `${originalNameNoExt}${targetFormat.ext}`;
-                    triggerDownload(convertedBlob, newFileName);
-
+                    
                     statusSpan.textContent = "Success";
                     statusSpan.classList.add("status-success");
+                    return { blob: convertedBlob, name: newFileName };
                 }
             } catch (err) {
                 console.error("Conversion failed:", err);
                 statusSpan.textContent = "Error";
                 statusSpan.classList.add("status-error");
+                return null;
             } finally {
                 convertBtn.disabled = false;
-                convertBtn.innerHTML = btnOriginalContent;
-                lucide.createIcons();
             }
+            return null;
+        };
+
+        // Single file convert click
+        convertBtn.addEventListener('click', async () => {
+            const btnOriginalContent = convertBtn.innerHTML;
+            convertBtn.innerHTML = `<span>Processing...</span>`;
+            
+            const result = await fileItem._doConvert();
+            if (result && result.blob) {
+                triggerDownload(result.blob, result.name);
+            }
+            
+            convertBtn.innerHTML = btnOriginalContent;
+            lucide.createIcons();
         });
 
         fileList.appendChild(clone);
     }
 
-    // --- Conversion Logic ---
+    // --- Conversion Logic Models ---
 
     function triggerDownload(blob, filename) {
         const url = URL.createObjectURL(blob);
@@ -278,7 +318,6 @@ document.addEventListener("DOMContentLoaded", () => {
                         ctx.fillStyle = '#FFFFFF';
                         ctx.fillRect(0, 0, canvas.width, canvas.height);
                     }
-
                     ctx.drawImage(img, 0, 0);
 
                     canvas.toBlob((blob) => {
@@ -322,10 +361,8 @@ document.addEventListener("DOMContentLoaded", () => {
         let data = JSON.parse(text);
         const arr = Array.isArray(data) ? data : [data];
         if (arr.length === 0) return new Blob([""], { type: 'text/csv' });
-
         const headers = Object.keys(arr[0]);
         const csvRows = [headers.join(',')];
-
         for (const row of arr) {
             const values = headers.map(header => {
                 const val = row[header];
@@ -337,7 +374,6 @@ document.addEventListener("DOMContentLoaded", () => {
             });
             csvRows.push(values.join(','));
         }
-
         return new Blob([csvRows.join('\n')], { type: 'text/csv' });
     }
     
@@ -351,9 +387,7 @@ document.addEventListener("DOMContentLoaded", () => {
     async function convertCsvToJson(file) {
         const text = await file.text();
         const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
-
         if (lines.length === 0) return new Blob(["[]"], { type: 'application/json' });
-
         const parseCSVLine = (line) => {
             const result = [];
             let current = '', inQuotes = false;
@@ -372,10 +406,8 @@ document.addEventListener("DOMContentLoaded", () => {
             result.push(current);
             return result;
         };
-
         const headers = parseCSVLine(lines[0]);
         const resultData = [];
-
         for (let i = 1; i < lines.length; i++) {
             const obj = {};
             const currentLine = parseCSVLine(lines[i]);
@@ -384,7 +416,6 @@ document.addEventListener("DOMContentLoaded", () => {
             }
             resultData.push(obj);
         }
-
         return new Blob([JSON.stringify(resultData, null, 2)], { type: 'application/json' });
     }
 
@@ -392,7 +423,6 @@ document.addEventListener("DOMContentLoaded", () => {
         const text = await file.text();
         const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
         if (lines.length === 0) return new Blob([""], { type: 'text/markdown' });
-
         const parseCSVLine = (line) => {
             const result = [];
             let current = '', inQuotes = false;
@@ -411,25 +441,19 @@ document.addEventListener("DOMContentLoaded", () => {
             result.push(current);
             return result;
         };
-
         const headers = parseCSVLine(lines[0]);
         let md = '| ' + headers.join(' | ') + ' |\n';
         md += '|' + headers.map(() => '---').join('|') + '|\n';
-
         for (let i = 1; i < lines.length; i++) {
             const row = parseCSVLine(lines[i]);
             md += '| ' + row.join(' | ') + ' |\n';
         }
-
         return new Blob([md], { type: 'text/markdown' });
     }
 
     async function convertMarkdownToHtml(file) {
         const text = await file.text();
-        // Uses marked.js included in index.html
         const html = marked.parse(text);
-        
-        // Wrap in a basic HTML template with some default styling
         const fullHtml = `<!DOCTYPE html>
 <html lang="en">
 <head>

@@ -438,6 +438,47 @@ footer {
     color: var(--primary-color);
 }
 
+.list-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.action-btn {
+    background: rgba(99, 102, 241, 0.15);
+    border: 1px solid var(--primary-color);
+    color: var(--text-main);
+    padding: 8px 16px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 600;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: var(--transition-premium);
+}
+
+.action-btn:hover:not(:disabled) {
+    background: var(--primary-color);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px var(--primary-glow);
+}
+
+.action-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.spin {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
 .icon-btn {
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid var(--border-glass);
