@@ -4,8 +4,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const dropZone = document.getElementById("drop-zone");
     const fileInput = document.getElementById("file-input");
-    const fileListContainer = document.getElementById("file-list");
+    const fileListContainer = document.getElementById("file-list-container");
+    const fileList = document.getElementById("file-list");
     const fileTemplate = document.getElementById("file-item-template");
+    const clearAllBtn = document.getElementById("clear-all-btn");
+
+    clearAllBtn.addEventListener("click", () => {
+        fileList.innerHTML = "";
+        fileListContainer.classList.add("hidden");
+    });
 
     // Formats mapping: source -> available targets
     const CONVERSION_MAP = {
@@ -25,6 +32,12 @@ document.addEventListener("DOMContentLoaded", () => {
         ],
         'csv': [
             { label: 'JSON', mime: 'application/json', ext: '.json' }
+        ],
+        'markdown': [
+            { label: 'HTML', mime: 'text/html', ext: '.html' }
+        ],
+        'text': [
+            { label: 'Base64', mime: 'text/plain', ext: '.b64.txt' }
         ]
     };
 
@@ -54,6 +67,9 @@ document.addEventListener("DOMContentLoaded", () => {
     fileInput.addEventListener('change', (e) => handleFiles(e.target.files), false);
 
     function handleFiles(files) {
+        if (files.length > 0) {
+            fileListContainer.classList.remove("hidden");
+        }
         [...files].forEach(processFile);
     }
 
@@ -71,8 +87,10 @@ document.addEventListener("DOMContentLoaded", () => {
             if (file.type === 'image/svg+xml' || file.name.endsWith('.svg')) return 'svg';
             return 'image';
         }
+        if (file.name.endsWith('.md') || file.name.endsWith('.markdown')) return 'markdown';
         if (file.type === 'application/json' || file.name.endsWith('.json')) return 'json';
         if (file.type === 'text/csv' || file.name.endsWith('.csv')) return 'csv';
+        if (file.type === 'text/plain' || file.name.endsWith('.txt')) return 'text';
         return null;
     }
 
@@ -95,6 +113,10 @@ document.addEventListener("DOMContentLoaded", () => {
         if (category === 'image' || category === 'svg') {
             iconElement.setAttribute('data-lucide', 'image');
         } else if (category === 'json' || category === 'csv') {
+            iconElement.setAttribute('data-lucide', 'file-spreadsheet');
+        } else if (category === 'markdown') {
+            iconElement.setAttribute('data-lucide', 'file-code-2');
+        } else if (category === 'text') {
             iconElement.setAttribute('data-lucide', 'file-text');
         }
 
@@ -112,13 +134,34 @@ document.addEventListener("DOMContentLoaded", () => {
         // Populate select
         const select = clone.querySelector('.format-select');
         availableFormats.forEach(format => {
-            // Don't show the exact same format as target
             if (file.type === format.mime) return;
-
             const option = document.createElement('option');
             option.value = JSON.stringify(format);
             option.textContent = format.label;
             select.appendChild(option);
+        });
+
+        // Setup Quality Control
+        const qualityControl = clone.querySelector('.quality-control');
+        const qualitySlider = clone.querySelector('.quality-slider');
+        const qualityValue = clone.querySelector('.quality-value');
+
+        if (qualitySlider) {
+            qualitySlider.addEventListener('input', (e) => {
+                qualityValue.textContent = `${Math.round(e.target.value * 100)}%`;
+            });
+        }
+
+        select.addEventListener('change', () => {
+            const selectedFormatVal = select.value;
+            if (!selectedFormatVal) return;
+            const targetFormat = JSON.parse(selectedFormatVal);
+            
+            if (targetFormat.mime === 'image/jpeg' || targetFormat.mime === 'image/webp') {
+                qualityControl.classList.remove('hidden');
+            } else {
+                qualityControl.classList.add('hidden');
+            }
         });
 
         // Setup Convert Button
@@ -130,6 +173,8 @@ document.addEventListener("DOMContentLoaded", () => {
             if (!selectedFormatVal) return;
 
             const targetFormat = JSON.parse(selectedFormatVal);
+            const quality = qualitySlider ? parseFloat(qualitySlider.value) : 0.9;
+            
             convertBtn.disabled = true;
             const btnOriginalContent = convertBtn.innerHTML;
             convertBtn.innerHTML = `<span>Processing...</span>`;
@@ -142,12 +187,16 @@ document.addEventListener("DOMContentLoaded", () => {
                     if (targetFormat.ext === '.pdf') {
                         convertedBlob = await convertImageToPdf(file);
                     } else {
-                        convertedBlob = await convertImage(file, targetFormat.mime);
+                        convertedBlob = await convertImage(file, targetFormat.mime, quality);
                     }
                 } else if (category === 'json' && targetFormat.ext === '.csv') {
                     convertedBlob = await convertJsonToCsv(file);
                 } else if (category === 'csv' && targetFormat.ext === '.json') {
                     convertedBlob = await convertCsvToJson(file);
+                } else if (category === 'markdown' && targetFormat.ext === '.html') {
+                    convertedBlob = await convertMarkdownToHtml(file);
+                } else if (category === 'text' && targetFormat.ext === '.b64.txt') {
+                    convertedBlob = await convertTextToBase64(file);
                 }
 
                 if (convertedBlob) {
@@ -169,7 +218,7 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         });
 
-        fileListContainer.appendChild(clone);
+        fileList.appendChild(clone);
     }
 
     // --- Conversion Logic ---
@@ -185,7 +234,7 @@ document.addEventListener("DOMContentLoaded", () => {
         URL.revokeObjectURL(url);
     }
 
-    function convertImage(file, targetMimeType) {
+    function convertImage(file, targetMimeType, quality = 0.9) {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
             reader.onload = (e) => {
@@ -206,7 +255,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     canvas.toBlob((blob) => {
                         if (blob) resolve(blob);
                         else reject(new Error("Canvas toBlob failed"));
-                    }, targetMimeType, 0.9);
+                    }, targetMimeType, quality);
                 };
                 img.onerror = () => reject(new Error("Failed to load image"));
                 img.src = e.target.result;
@@ -301,5 +350,44 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         return new Blob([JSON.stringify(resultData, null, 2)], { type: 'application/json' });
+    }
+
+    async function convertMarkdownToHtml(file) {
+        const text = await file.text();
+        // Uses marked.js included in index.html
+        const html = marked.parse(text);
+        
+        // Wrap in a basic HTML template with some default styling
+        const fullHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${file.name}</title>
+<style>
+    body { font-family: system-ui, -apple-system, sans-serif; line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 2rem; color: #333; }
+    pre { background: #f4f4f4; padding: 1rem; border-radius: 8px; overflow-x: auto; }
+    code { font-family: monospace; background: #f4f4f4; padding: 0.2rem 0.4rem; border-radius: 4px; }
+    blockquote { border-left: 4px solid #ddd; margin: 0; padding-left: 1rem; color: #666; }
+    img { max-width: 100%; height: auto; }
+</style>
+</head>
+<body>
+${html}
+</body>
+</html>`;
+        return new Blob([fullHtml], { type: 'text/html' });
+    }
+
+    async function convertTextToBase64(file) {
+        const arrayBuffer = await file.arrayBuffer();
+        const bytes = new Uint8Array(arrayBuffer);
+        let binary = '';
+        const len = bytes.byteLength;
+        for (let i = 0; i < len; i++) {
+            binary += String.fromCharCode(bytes[i]);
+        }
+        const b64 = btoa(binary);
+        return new Blob([b64], { type: 'text/plain' });
     }
 });
