@@ -2,6 +2,8 @@
 
 **FileFlex** is a premium, high-performance web application designed for seamless, local-first file transformations. Built with a stunning glassmorphism aesthetic, it prioritizes security and speed by processing everything directly in your browser.
 
+## 🚀 [Live Demo](https://dsingh92342.github.io/FileFlex/)
+
 ## ✨ Features
 
 - **Local Processing:** Your files never leave your computer. Privacy by design.
