@@ -10,8 +10,18 @@ document.addEventListener("DOMContentLoaded", () => {
     const clearAllBtn = document.getElementById("clear-all-btn");
 
     clearAllBtn.addEventListener("click", () => {
-        fileList.innerHTML = "";
-        fileListContainer.classList.add("hidden");
+        const items = Array.from(fileList.children);
+        items.forEach((item, index) => {
+            // Smooth exit animation
+            item.style.transition = 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
+            item.style.opacity = '0';
+            item.style.transform = 'translateX(30px)';
+        });
+        
+        setTimeout(() => {
+            fileList.innerHTML = "";
+            fileListContainer.classList.add("hidden");
+        }, 300); // Wait for animation to finish
     });
 
     // Formats mapping: source -> available targets
@@ -28,16 +38,23 @@ document.addEventListener("DOMContentLoaded", () => {
             { label: 'WEBP', mime: 'image/webp', ext: '.webp' }
         ],
         'json': [
-            { label: 'CSV', mime: 'text/csv', ext: '.csv' }
+            { label: 'CSV', mime: 'text/csv', ext: '.csv' },
+            { label: 'Minify', mime: 'application/json', ext: '.min.json' },
+            { label: 'Beautify', mime: 'application/json', ext: '.formatted.json' }
         ],
         'csv': [
-            { label: 'JSON', mime: 'application/json', ext: '.json' }
+            { label: 'JSON', mime: 'application/json', ext: '.json' },
+            { label: 'Markdown Table', mime: 'text/markdown', ext: '.md' }
         ],
         'markdown': [
             { label: 'HTML', mime: 'text/html', ext: '.html' }
         ],
         'text': [
-            { label: 'Base64', mime: 'text/plain', ext: '.b64.txt' }
+            { label: 'Base64 Encode', mime: 'text/plain', ext: '.b64.txt' },
+            { label: 'URL Encode', mime: 'text/plain', ext: '.url.txt' }
+        ],
+        'html': [
+            { label: 'Extract Text', mime: 'text/plain', ext: '.txt' }
         ]
     };
 
@@ -70,7 +87,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (files.length > 0) {
             fileListContainer.classList.remove("hidden");
         }
-        [...files].forEach(processFile);
+        [...files].forEach((file, index) => processFile(file, index));
     }
 
     function formatBytes(bytes, decimals = 2) {
@@ -90,11 +107,12 @@ document.addEventListener("DOMContentLoaded", () => {
         if (file.name.endsWith('.md') || file.name.endsWith('.markdown')) return 'markdown';
         if (file.type === 'application/json' || file.name.endsWith('.json')) return 'json';
         if (file.type === 'text/csv' || file.name.endsWith('.csv')) return 'csv';
+        if (file.type === 'text/html' || file.name.endsWith('.html')) return 'html';
         if (file.type === 'text/plain' || file.name.endsWith('.txt')) return 'text';
         return null;
     }
 
-    function processFile(file) {
+    function processFile(file, index) {
         const category = detectCategory(file);
 
         if (!category) {
@@ -108,6 +126,9 @@ document.addEventListener("DOMContentLoaded", () => {
         const clone = fileTemplate.content.cloneNode(true);
         const fileItem = clone.querySelector('.file-item');
 
+        // Staggered entry animation based on index
+        fileItem.style.animationDelay = `${index * 0.1}s`;
+
         // Update file icon based on category
         const iconElement = clone.querySelector('.file-type-icon');
         if (category === 'image' || category === 'svg') {
@@ -118,6 +139,8 @@ document.addEventListener("DOMContentLoaded", () => {
             iconElement.setAttribute('data-lucide', 'file-code-2');
         } else if (category === 'text') {
             iconElement.setAttribute('data-lucide', 'file-text');
+        } else if (category === 'html') {
+            iconElement.setAttribute('data-lucide', 'globe');
         }
 
         // Re-initialize icon for the cloned template
@@ -134,7 +157,7 @@ document.addEventListener("DOMContentLoaded", () => {
         // Populate select
         const select = clone.querySelector('.format-select');
         availableFormats.forEach(format => {
-            if (file.type === format.mime) return;
+            if (file.type === format.mime && format.label !== 'Minify' && format.label !== 'Beautify') return;
             const option = document.createElement('option');
             option.value = JSON.stringify(format);
             option.textContent = format.label;
@@ -189,14 +212,20 @@ document.addEventListener("DOMContentLoaded", () => {
                     } else {
                         convertedBlob = await convertImage(file, targetFormat.mime, quality);
                     }
-                } else if (category === 'json' && targetFormat.ext === '.csv') {
-                    convertedBlob = await convertJsonToCsv(file);
-                } else if (category === 'csv' && targetFormat.ext === '.json') {
-                    convertedBlob = await convertCsvToJson(file);
+                } else if (category === 'json') {
+                    if (targetFormat.ext === '.csv') convertedBlob = await convertJsonToCsv(file);
+                    else if (targetFormat.label === 'Minify') convertedBlob = await convertJsonFormat(file, false);
+                    else if (targetFormat.label === 'Beautify') convertedBlob = await convertJsonFormat(file, true);
+                } else if (category === 'csv') {
+                    if (targetFormat.ext === '.json') convertedBlob = await convertCsvToJson(file);
+                    else if (targetFormat.label === 'Markdown Table') convertedBlob = await convertCsvToMarkdown(file);
                 } else if (category === 'markdown' && targetFormat.ext === '.html') {
                     convertedBlob = await convertMarkdownToHtml(file);
-                } else if (category === 'text' && targetFormat.ext === '.b64.txt') {
-                    convertedBlob = await convertTextToBase64(file);
+                } else if (category === 'text') {
+                    if (targetFormat.label === 'Base64 Encode') convertedBlob = await convertTextToBase64(file);
+                    else if (targetFormat.label === 'URL Encode') convertedBlob = await convertTextToUrlEncode(file);
+                } else if (category === 'html' && targetFormat.label === 'Extract Text') {
+                    convertedBlob = await convertHtmlToText(file);
                 }
 
                 if (convertedBlob) {
@@ -311,6 +340,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
         return new Blob([csvRows.join('\n')], { type: 'text/csv' });
     }
+    
+    async function convertJsonFormat(file, beautify) {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        const str = beautify ? JSON.stringify(data, null, 2) : JSON.stringify(data);
+        return new Blob([str], { type: 'application/json' });
+    }
 
     async function convertCsvToJson(file) {
         const text = await file.text();
@@ -352,6 +388,42 @@ document.addEventListener("DOMContentLoaded", () => {
         return new Blob([JSON.stringify(resultData, null, 2)], { type: 'application/json' });
     }
 
+    async function convertCsvToMarkdown(file) {
+        const text = await file.text();
+        const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
+        if (lines.length === 0) return new Blob([""], { type: 'text/markdown' });
+
+        const parseCSVLine = (line) => {
+            const result = [];
+            let current = '', inQuotes = false;
+            for (let i = 0; i < line.length; i++) {
+                const char = line[i];
+                if (char === '"') {
+                    if (inQuotes && line[i + 1] === '"') { current += '"'; i++; }
+                    else inQuotes = !inQuotes;
+                } else if (char === ',' && !inQuotes) {
+                    result.push(current);
+                    current = '';
+                } else {
+                    current += char;
+                }
+            }
+            result.push(current);
+            return result;
+        };
+
+        const headers = parseCSVLine(lines[0]);
+        let md = '| ' + headers.join(' | ') + ' |\n';
+        md += '|' + headers.map(() => '---').join('|') + '|\n';
+
+        for (let i = 1; i < lines.length; i++) {
+            const row = parseCSVLine(lines[i]);
+            md += '| ' + row.join(' | ') + ' |\n';
+        }
+
+        return new Blob([md], { type: 'text/markdown' });
+    }
+
     async function convertMarkdownToHtml(file) {
         const text = await file.text();
         // Uses marked.js included in index.html
@@ -389,5 +461,17 @@ ${html}
         }
         const b64 = btoa(binary);
         return new Blob([b64], { type: 'text/plain' });
+    }
+    
+    async function convertTextToUrlEncode(file) {
+        const text = await file.text();
+        return new Blob([encodeURIComponent(text)], { type: 'text/plain' });
+    }
+
+    async function convertHtmlToText(file) {
+        const text = await file.text();
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(text, 'text/html');
+        return new Blob([doc.body.textContent || ""], { type: 'text/plain' });
     }
 });

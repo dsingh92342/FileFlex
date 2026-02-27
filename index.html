@@ -4,15 +4,57 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <!-- Primary Meta Tags -->
     <title>FileFlex | Premium Local File Transformer</title>
+    <meta name="title" content="FileFlex | Premium Local File Transformer">
+    <meta name="description" content="Secure, fast, and local-first file conversions. Convert images to PDF, swap JSON to CSV, format code, and process Markdown instantly in your browser.">
+    <meta name="keywords" content="file converter, local file transformer, image to pdf, json to csv, markdown to html, base64 encoder, browser tools, secure file processing">
+    <meta name="author" content="FileFlex">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#6366f1">
+    
+    <!-- Canonical URL -->
+    <link rel="canonical" href="https://dsingh92342.github.io/FileFlex/">
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://dsingh92342.github.io/FileFlex/">
+    <meta property="og:title" content="FileFlex | Premium Local File Transformer">
+    <meta property="og:description" content="Secure, fast, and local-first file conversions entirely within your browser.">
+    
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:url" content="https://dsingh92342.github.io/FileFlex/">
+    <meta property="twitter:title" content="FileFlex | Premium Local File Transformer">
+    <meta property="twitter:description" content="Secure, fast, and local-first file conversions entirely within your browser.">
+
+    <!-- Structured Data (JSON-LD) -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "FileFlex",
+      "url": "https://dsingh92342.github.io/FileFlex/",
+      "description": "Premium browser-based tool for converting images, JSON, CSV, Markdown, and text files locally.",
+      "applicationCategory": "UtilitiesApplication",
+      "operatingSystem": "All",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      }
+    }
+    </script>
+
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
     <!-- For Markdown Conversion -->
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js" defer></script>
     <!-- For PDF Conversion -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
 </head>
 
 <body>
@@ -46,11 +88,11 @@
             <div id="file-list-container" class="file-list-container hidden">
                 <div class="list-header">
                     <h3><i data-lucide="layers"></i> Your Files</h3>
-                    <button id="clear-all-btn" class="icon-btn tooltip" data-tooltip="Clear All">
+                    <button id="clear-all-btn" class="icon-btn tooltip" aria-label="Clear all files" data-tooltip="Clear All">
                         <i data-lucide="trash-2"></i>
                     </button>
                 </div>
-                <div id="file-list" class="file-list">
+                <div id="file-list" class="file-list" aria-live="polite">
                     <!-- File items will be injected here -->
                 </div>
             </div>
@@ -64,7 +106,7 @@
     <!-- Template for a file item -->
     <template id="file-item-template">
         <div class="file-item">
-            <div class="file-icon-container">
+            <div class="file-icon-container" aria-hidden="true">
                 <i data-lucide="file" class="file-type-icon"></i>
             </div>
             <div class="file-info">
@@ -73,21 +115,21 @@
             </div>
             <div class="conversion-controls">
                 <div class="quality-control hidden" title="Adjust Quality">
-                    <input type="range" class="quality-slider" min="0.1" max="1" step="0.1" value="0.9">
+                    <input type="range" class="quality-slider" min="0.1" max="1" step="0.1" value="0.9" aria-label="Image Quality">
                     <span class="quality-value">90%</span>
                 </div>
                 <div class="format-badge">
                     <span>to</span>
-                    <select class="format-select">
+                    <select class="format-select" aria-label="Target Format">
                         <option value="" disabled selected>Format</option>
                     </select>
                 </div>
-                <button class="convert-btn">
+                <button class="convert-btn" aria-label="Convert File">
                     <i data-lucide="refresh-cw"></i>
                     <span>Convert</span>
                 </button>
             </div>
-            <div class="file-status">Ready</div>
+            <div class="file-status" aria-live="polite">Ready</div>
         </div>
     </template>
 
