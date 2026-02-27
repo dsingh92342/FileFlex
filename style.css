@@ -544,6 +544,40 @@ footer {
     text-align: right;
 }
 
+/* Resize Controls */
+.resize-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: rgba(0, 0, 0, 0.3);
+    padding: 6px 10px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.resize-input {
+    width: 60px;
+    background: var(--bg-main);
+    border: 1px solid var(--border-glass);
+    color: white;
+    padding: 4px 6px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-align: center;
+    outline: none;
+}
+
+.resize-input:focus {
+    border-color: var(--primary-color);
+}
+
+.resize-controls span {
+    color: var(--text-dim);
+    font-size: 0.75rem;
+    font-weight: 800;
+}
+
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
     width: 8px;
